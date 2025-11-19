@@ -17,6 +17,7 @@ PALETTE = {
     "accent": "#7ED6DF",    # تيفاني pastel
     "accent2": "#C39BD3",   # بنفسجي فاتح
     "muted": "#8E9AAF",
+    "delete": "#FF6B6B",
 }
 
 # ------------ JSON helpers مع معالجة الأخطاء ------------
@@ -69,6 +70,7 @@ class NotesApp(ctk.CTk):
 
         init_notes_file()
         self.notes = load_notes()
+        self.filtered_notes = self.notes.copy()
 
         self._build_ui()
         self.refresh_notes_display()
@@ -126,14 +128,29 @@ class NotesApp(ctk.CTk):
                                    anchor="w")
         notes_label.pack(fill="x", padx=6, pady=(2,6))
 
-        # شريط تمرير مع إطار قابل للتمرير
-        self.scroll_frame = ctk.CTkScrollableFrame(left_panel, width=420, corner_radius=8)
-        self.scroll_frame.pack(fill="both", expand=True, padx=6, pady=(0,6))
-        self.scroll_frame.pack_propagate(False)
+        search_frame = ctk.CTkFrame(left_panel, fg_color=PALETTE["bg"])
+        search_frame.pack(fill="x", padx=6, pady=(0, 8))
 
-        # مكان لبطاقات الملاحظات
-        self.cards_container = ctk.CTkFrame(self.scroll_frame, fg_color=PALETTE["bg"])
-        self.cards_container.pack(fill="both", expand=True, padx=6, pady=6)
+        self.search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="🔍 ابحث في الملاحظات...",
+            width=300
+        )
+        self.search_entry.pack(side="right", padx=4)
+        self.search_entry.bind("<KeyRelease>", self.on_search)
+
+        # زر مسح البحث
+        clear_btn = ctk.CTkButton(
+            search_frame, text="مسح",
+            width=60, command=self.clear_search,
+            fg_color=PALETTE["muted"]
+        )
+        clear_btn.pack(side="right", padx=4)
+
+        # شريط تمرير مع إطار قابل للتمرير
+
+        self.scroll_frame = ctk.CTkScrollableFrame(left_panel, fg_color=PALETTE["bg"])
+        self.scroll_frame.pack(fill="both", expand=True, padx=6, pady=6)
 
     # ---------- فعّاليات الواجهة ----------
     def _on_add_hover(self, event):
@@ -173,58 +190,113 @@ class NotesApp(ctk.CTk):
         # تأكيد بصري صغير
         self.add_btn.configure(text="تمت الإضافة ✓")
         self.after(900, lambda: self.add_btn.configure(text="إضافة الملاحظة"))
+        self.filtered_notes = self.notes.copy()
+        self.refresh_notes_display()
+
+    def on_search(self, event=None):
+        query = self.search_entry.get().strip().lower()
+
+        if not query:
+            self.filtered_notes = self.notes.copy()
+        else:
+            self.filtered_notes = [
+                note for note in self.notes
+                if query in note["title"].lower() or query in note["body"].lower()
+            ]
 
         self.refresh_notes_display()
 
-    def refresh_notes_display(self):
-        # تنظيف الحاوية
-        for child in self.cards_container.winfo_children():
-            child.destroy()
+    def clear_search(self):
+        self.search_entry.delete(0, "end")
+        self.filtered_notes = self.notes.copy()
+        self.refresh_notes_display()
 
-        # عرض الملاحظات كـ Cards
-        if not self.notes:
-            empty = ctk.CTkLabel(self.cards_container, text="لا توجد ملاحظات حتى الآن.", text_color=PALETTE["muted"])
-            empty.pack(pady=12)
+    def refresh_notes_display(self):
+        print(f"🔍 تحديث العرض... عدد الملاحظات: {len(self.filtered_notes)}")
+
+        # تنظيف كل شيء في scroll_frame
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+
+        # إذا لم توجد ملاحظات
+        if not self.filtered_notes:
+            msg = "لا توجد ملاحظات حتى الآن." if not self.notes else "لا توجد نتائج للبحث."
+            empty_label = ctk.CTkLabel(
+                self.scroll_frame,
+                text=msg,
+                text_color=PALETTE["muted"],
+                font=ctk.CTkFont(size=13)
+            )
+            empty_label.pack(pady=20)
+            print("⚠ لا توجد ملاحظات لعرضها")
             return
 
-        # أعلى الملاحظة أحدث أولاً
-        for i, note in enumerate(reversed(self.notes)):
-            self._create_card(self.cards_container, note, index=len(self.notes)-1 - i)
+        # عرض الملاحظات (الأحدث أولاً)
+        print(f"✅ سيتم عرض {len(self.filtered_notes)} ملاحظة")
+        for idx, note in enumerate(reversed(self.filtered_notes)):
+            try:
+                original_index = self.notes.index(note)
+                print(f"  → إنشاء بطاقة: {note['title'][:20]}...")
+                self._create_card(self.scroll_frame, note, original_index)
+            except Exception as e:
+                print(f"❌ خطأ في إنشاء البطاقة {idx}: {e}")
+
+        # تحديث العرض
+        self.scroll_frame.update_idletasks()
+        print("✅ تم تحديث العرض بنجاح")
 
     def _create_card(self, parent, note, index):
-        card = ctk.CTkFrame(parent, fg_color=PALETTE["card"], corner_radius=10, height=80)
+        card = ctk.CTkFrame(parent, fg_color=PALETTE["card"], corner_radius=10, height=100)
         card.pack(fill="x", pady=8, padx=6)
 
-        # عنوان ووقت
-        title_lbl = ctk.CTkLabel(card, text=note["title"], font=ctk.CTkFont(size=13, weight="bold"),
-                                 anchor="e")
-        title_lbl.place(relx=0.99, rely=0.18, anchor="ne")
+        # إطار المحتوى
+        content_frame = ctk.CTkFrame(card, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True, padx=12, pady=10)
 
-        date_lbl = ctk.CTkLabel(card, text=note["date"], font=ctk.CTkFont(size=10), text_color=PALETTE["muted"],
-                                anchor="e")
-        date_lbl.place(relx=0.99, rely=0.42, anchor="ne")
+        # العنوان
+        title_lbl = ctk.CTkLabel(
+            content_frame, text=note["title"],
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="e"
+        )
+        title_lbl.pack(anchor="e", pady=(0, 2))
+
+        # التاريخ
+        date_lbl = ctk.CTkLabel(
+            content_frame, text=note["date"],
+            font=ctk.CTkFont(size=10),
+            text_color=PALETTE["muted"],
+            anchor="e"
+        )
+        date_lbl.pack(anchor="e", pady=(0, 6))
 
         # نص مختصر
         snippet = note["body"]
-        if len(snippet) > 90:
-            snippet = snippet[:90] + "..."
+        if len(snippet) > 60:
+            snippet = snippet[:60] + "..."
 
-        body_lbl = ctk.CTkLabel(card, text=snippet, anchor="w", width=360, wraplength=420, justify="right")
-        body_lbl.place(relx=0.01, rely=0.5, anchor="w")
+        body_lbl = ctk.CTkLabel(
+            content_frame, text=snippet,
+            anchor="w", wraplength=350,
+            justify="right"
+        )
+        body_lbl.pack(anchor="e", pady=(0, 8))
 
-        # زر فتح التفاصيل
-        view_btn = ctk.CTkButton(card, text="عرض", width=70, fg_color=PALETTE["accent"], corner_radius=8,
-                                 command=lambda n=note: open_note_modal(self, n))
-        view_btn.place(relx=0.01, rely=0.18, anchor="w")
+        # الأزرار
+        btn_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        btn_frame.pack(anchor="w")
 
-        # Hover effect على البطاقة: ظل خفيف (محاكاة بتغيير اللون الخلفي)
-        def on_enter(e):
-            card.configure(fg_color="#FBFBFF")
-        def on_leave(e):
-            card.configure(fg_color=PALETTE["card"])
+        view_btn = ctk.CTkButton(
+            btn_frame, text="عرض", width=70,
+            fg_color=PALETTE["accent"],
+            command=lambda n=note: open_note_modal(self, n)
+        )
+        view_btn.pack(side="left", padx=2)
 
-        card.bind("<Enter>", on_enter)
-        card.bind("<Leave>", on_leave)
+
+        # Hover effect
+        card.bind("<Enter>", lambda e: card.configure(fg_color="#FBFBFF"))
+        card.bind("<Leave>", lambda e: card.configure(fg_color=PALETTE["card"]))
 
 # ------------ تشغيل التطبيق ------------
 if __name__ == "__main__":
