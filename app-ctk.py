@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 import customtkinter as ctk
 from tkinter import messagebox
+from delete_page import DeletePage
+
 
 # ------------ إعداد CustomTkinter ------------
 ctk.set_appearance_mode("Light")
@@ -84,6 +86,9 @@ class NotesApp(ctk.CTk):
 
         self._build_ui()
         self.refresh_notes_display()
+
+    def open_delete_page(self):
+        DeletePage(self, self.notes, save_notes, self.refresh_notes_display)
 
     def _build_ui(self):
         # رأس التطبيق
@@ -292,6 +297,16 @@ class NotesApp(ctk.CTk):
         # الأزرار
         btn_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
         btn_frame.pack(anchor="w")
+
+        delete_page_btn = ctk.CTkButton(
+            btn_frame, text=" صفحة الحذف",
+            width=180,
+            fg_color=PALETTE["delete"],
+            text_color="white",
+            hover_color="#B71C1C",
+            command=self.open_delete_page
+        )
+        delete_page_btn.pack(pady=5)
 
         # زر العرض (لون ذهبي)
         view_btn = ctk.CTkButton(
